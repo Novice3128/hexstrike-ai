@@ -1,0 +1,12 @@
+.git/
+.omc/
+__pycache__/
+*.pyc
+*.pyo
+*.bak
+*.log
+LOCAL_DEPENDENCIES.md
+start-hexstrike-local.sh
+stop-hexstrike-local.sh
+AGENTS.md
+=
