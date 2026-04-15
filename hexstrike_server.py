@@ -6663,7 +6663,8 @@ def setup_logging():
 DEBUG_MODE = os.environ.get("DEBUG_MODE", "0").lower() in ("1", "true", "yes", "y")
 COMMAND_TIMEOUT = 300  # 5 minutes default timeout
 CACHE_SIZE = 1000
-CACHE_TTL = 3600  # 1 hour
+CACHE_TTL = 3600  # 1 hour for successful results
+CACHE_TTL_FAILURE = 60  # 1 minute for failed results
 
 class HexStrikeCache:
     """Advanced caching system for command results"""
@@ -6679,17 +6680,13 @@ class HexStrikeCache:
         key_data = f"{command}:{json.dumps(params, sort_keys=True)}"
         return hashlib.md5(key_data.encode()).hexdigest()
 
-    def _is_expired(self, timestamp: float) -> bool:
-        """Check if cache entry is expired"""
-        return time.time() - timestamp > self.ttl
-
     def get(self, command: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Get cached result if available and not expired"""
         key = self._generate_key(command, params)
 
         if key in self.cache:
-            timestamp, data = self.cache[key]
-            if not self._is_expired(timestamp):
+            timestamp, ttl, data = self.cache[key]
+            if time.time() - timestamp <= ttl:
                 # Move to end (most recently used)
                 self.cache.move_to_end(key)
                 self.stats["hits"] += 1
@@ -6703,9 +6700,10 @@ class HexStrikeCache:
         logger.info(f"🔍 Cache MISS for command: {command}")
         return None
 
-    def set(self, command: str, params: Dict[str, Any], result: Dict[str, Any]):
-        """Store result in cache"""
+    def set(self, command: str, params: Dict[str, Any], result: Dict[str, Any], ttl: int = None):
+        """Store result in cache with optional per-entry TTL"""
         key = self._generate_key(command, params)
+        entry_ttl = ttl if ttl is not None else self.ttl
 
         # Remove oldest entries if cache is full
         while len(self.cache) >= self.max_size:
@@ -6713,8 +6711,8 @@ class HexStrikeCache:
             del self.cache[oldest_key]
             self.stats["evictions"] += 1
 
-        self.cache[key] = (time.time(), result)
-        logger.info(f"💾 Cached result for command: {command}")
+        self.cache[key] = (time.time(), entry_ttl, result)
+        logger.info(f"💾 Cached result for command: {command} (ttl={entry_ttl}s)")
 
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
@@ -8633,20 +8631,28 @@ cve_intelligence = CVEIntelligenceManager()
 exploit_generator = AIExploitGenerator()
 vulnerability_correlator = VulnerabilityCorrelator()
 
-def execute_command(command: str, use_cache: bool = True) -> Dict[str, Any]:
+def execute_command(command: str, use_cache: bool = True, no_cache: bool = False) -> Dict[str, Any]:
     """
     Execute a shell command with enhanced features
 
     Args:
         command: The command to execute
         use_cache: Whether to use caching for this command
+        no_cache: Force bypass cache (for debugging, also auto-detected from ?no_cache=1)
 
     Returns:
         A dictionary containing the stdout, stderr, return code, and metadata
     """
 
-    # Check cache first
-    if use_cache:
+    # Auto-detect no_cache from Flask request query parameter
+    if not no_cache:
+        try:
+            no_cache = request.args.get("no_cache", "0") in ("1", "true", "yes")
+        except RuntimeError:
+            pass  # Not in request context
+
+    # Check cache first (skip if no_cache requested)
+    if use_cache and not no_cache:
         cached_result = cache.get(command, {})
         if cached_result:
             return cached_result
@@ -8655,9 +8661,12 @@ def execute_command(command: str, use_cache: bool = True) -> Dict[str, Any]:
     executor = EnhancedCommandExecutor(command)
     result = executor.execute()
 
-    # Cache successful results
-    if use_cache and result.get("success", False):
-        cache.set(command, {}, result)
+    # Cache results with TTL based on success/failure
+    if use_cache:
+        if result.get("success", False):
+            cache.set(command, {}, result, ttl=CACHE_TTL)
+        else:
+            cache.set(command, {}, result, ttl=CACHE_TTL_FAILURE)
 
     return result
 

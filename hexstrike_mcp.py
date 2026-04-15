@@ -217,13 +217,14 @@ class HexStrikeClient:
             logger.error(f"💥 Unexpected error: {str(e)}")
             return {"error": f"Unexpected error: {str(e)}", "success": False}
 
-    def safe_post(self, endpoint: str, json_data: Dict[str, Any]) -> Dict[str, Any]:
+    def safe_post(self, endpoint: str, json_data: Dict[str, Any], timeout: Optional[int] = None) -> Dict[str, Any]:
         """
         Perform a POST request with JSON data.
 
         Args:
             endpoint: API endpoint path (without leading slash)
             json_data: JSON data to send
+            timeout: Optional per-request timeout in seconds (overrides default)
 
         Returns:
             Response data as dictionary
@@ -232,7 +233,7 @@ class HexStrikeClient:
 
         try:
             logger.debug(f"📡 POST {url} with data: {json_data}")
-            response = self.session.post(url, json=json_data, timeout=self.timeout)
+            response = self.session.post(url, json=json_data, timeout=timeout or self.timeout)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -264,17 +265,32 @@ class HexStrikeClient:
         """
         return self.safe_get("health")
 
-def setup_mcp_server(hexstrike_client: HexStrikeClient) -> FastMCP:
+def setup_mcp_server(
+    hexstrike_client: HexStrikeClient,
+    streamable_http_path: str = "/mcp",
+    stateless_http: bool = False
+) -> FastMCP:
     """
     Set up the MCP server with all enhanced tool functions
 
     Args:
         hexstrike_client: Initialized HexStrikeClient
+        streamable_http_path: HTTP path for streaming endpoints (default: "/mcp")
+        stateless_http: Enable stateless HTTP mode (default: False)
 
     Returns:
         Configured FastMCP instance
     """
-    mcp = FastMCP("hexstrike-ai-mcp")
+    mcp_host = os.environ.get("FASTMCP_HOST", "0.0.0.0")
+    mcp_port = int(os.environ.get("FASTMCP_PORT", "8889"))
+
+    mcp = FastMCP(
+        "hexstrike-ai-mcp",
+        host=mcp_host,
+        port=mcp_port,
+        streamable_http_path=streamable_http_path,
+        stateless_http=stateless_http
+    )
 
     # ============================================================================
     # CORE NETWORK SCANNING TOOLS
@@ -1285,29 +1301,34 @@ def setup_mcp_server(hexstrike_client: HexStrikeClient) -> FastMCP:
         return result
 
     @mcp.tool()
-    def amass_scan(domain: str, mode: str = "enum", additional_args: str = "") -> Dict[str, Any]:
+    def amass_scan(domain: str = "", target: str = "", mode: str = "enum", timeout: int = 120, additional_args: str = "") -> Dict[str, Any]:
         """
         Execute Amass for subdomain enumeration with enhanced logging.
 
         Args:
             domain: The target domain
+            target: Alias for domain (accepts both parameter names)
             mode: Amass mode (enum, intel, viz)
+            timeout: Maximum execution time in seconds (default: 120, use 'intel' mode for faster results)
             additional_args: Additional Amass arguments
 
         Returns:
             Subdomain enumeration results
         """
+        resolved_domain = domain or target
+        if not resolved_domain:
+            return {"success": False, "error": "Either 'domain' or 'target' must be provided"}
         data = {
-            "domain": domain,
+            "domain": resolved_domain,
             "mode": mode,
             "additional_args": additional_args
         }
-        logger.info(f"🔍 Starting Amass {mode}: {domain}")
-        result = hexstrike_client.safe_post("api/tools/amass", data)
+        logger.info(f"🔍 Starting Amass {mode}: {resolved_domain} (timeout={timeout}s)")
+        result = hexstrike_client.safe_post("api/tools/amass", data, timeout=timeout)
         if result.get("success"):
-            logger.info(f"✅ Amass completed for {domain}")
+            logger.info(f"✅ Amass completed for {resolved_domain}")
         else:
-            logger.error(f"❌ Amass failed for {domain}")
+            logger.error(f"❌ Amass failed for {resolved_domain}")
         return result
 
     @mcp.tool()

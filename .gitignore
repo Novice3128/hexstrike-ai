@@ -1,0 +1,21 @@
+# OMC state
+.omc/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Backups
+*.bak
+*.log
+
+# Local scripts (not for container)
+start-hexstrike-local.sh
+stop-hexstrike-local.sh
+docker-entrypoint.sh.local.bak
+hexstrike_mcp.py.local.bak
+
+# Misc
+=
+LOCAL_DEPENDENCIES.md
