@@ -750,6 +750,42 @@ MIT License - see LICENSE file for details.
 
 ---
 
+## ARXON Fork Modifications (Novice3128)
+
+This is a fork of [0x4m4/hexstrike-ai](https://github.com/0x4m4/hexstrike-ai) with modifications for integration into the [ARXON autonomous pentest system](https://github.com/Novice3128/Fake_AI_ARXON).
+
+### Changes from upstream (v3.1 ~ v3.5, 2026-04-15/16)
+
+- **Docker deployment**: Full Dockerfile with 8-layer tool installation (apt, Go, Rust, pip)
+- **Startup resilience**: MCP Adapter retry logic (3 attempts, 10/20s backoff) + 60s reconnect loop
+- **Subprocess timeout propagation**: `execute_command()` accepts optional `timeout` param, auto-detects from Flask request JSON — resolves 300s hardcap issue
+- **Cache TTL**: Success 3600s / Failure 60s per-entry TTL, `?no_cache=1` bypass
+- **amass_scan fix**: Dual parameter name support (`target`/`domain`)
+- **Web Security tools**: katana, dalfox, hakrawler, arjun, uro added
+- **enum4linux-ng deps**: samba-common-bin added
+- **Dockerfile hygiene**: Layer renumbering 1-8, all `|| true` patterns removed
+- **Integration tests**: 14/14 tests (11 unit + 3 container integration)
+- **Build notes**: `docker build` direct (not `docker compose build`) — documented in BUILD_NOTES.md
+
+### Verification (v3.5)
+
+```
+5/5 MCP servers healthy | 187 tools via adapter
+amass_scan(timeout=10) → 10.001s precise termination, timed_out:true
+24/24 automated tests passing (14 hexstrike + 10 adapter)
+```
+
+### Build
+
+```bash
+docker build -t hexstrike-ai:latest .
+# Do NOT use docker compose build — buildkit hang with large images
+```
+
+See [BUILD_NOTES.md](BUILD_NOTES.md) for details.
+
+---
+
 **Made with ❤️ by the cybersecurity community for AI-powered security automation**
 
 *HexStrike AI v6.0 - Where artificial intelligence meets cybersecurity excellence*
