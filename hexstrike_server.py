@@ -6665,6 +6665,7 @@ COMMAND_TIMEOUT = 300  # 5 minutes default timeout
 CACHE_SIZE = 1000
 CACHE_TTL = 3600  # 1 hour for successful results
 CACHE_TTL_FAILURE = 60  # 1 minute for failed results
+CACHE_TTL_SUCCESS = CACHE_TTL  # alias for naming symmetry with CACHE_TTL_FAILURE
 
 class HexStrikeCache:
     """Advanced caching system for command results"""
@@ -8645,10 +8646,14 @@ def execute_command(command: str, use_cache: bool = True, no_cache: bool = False
         A dictionary containing the stdout, stderr, return code, and metadata
     """
 
-    # Auto-detect no_cache from Flask request query parameter
+    # Auto-detect no_cache from Flask request query parameter or JSON body
     if not no_cache:
         try:
             no_cache = request.args.get("no_cache", "0") in ("1", "true", "yes")
+            if not no_cache:
+                req_json = request.get_json(silent=True)
+                if req_json:
+                    no_cache = req_json.get("no_cache", False) in (True, "true", "1", "yes")
         except RuntimeError:
             pass  # Not in request context
 
@@ -8678,7 +8683,9 @@ def execute_command(command: str, use_cache: bool = True, no_cache: bool = False
     result = executor.execute()
 
     # Cache results with TTL based on success/failure
-    if use_cache:
+    # Skip caching for timed-out results — they reflect the timeout limit,
+    # not the actual command outcome, and would pollute subsequent calls with longer timeouts.
+    if use_cache and not result.get("timed_out", False):
         if result.get("success", False):
             cache.set(command, {}, result, ttl=CACHE_TTL)
         else:
