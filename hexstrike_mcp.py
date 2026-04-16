@@ -1321,10 +1321,12 @@ def setup_mcp_server(
         data = {
             "domain": resolved_domain,
             "mode": mode,
+            "timeout": timeout,
             "additional_args": additional_args
         }
-        logger.info(f"🔍 Starting Amass {mode}: {resolved_domain} (timeout={timeout}s)")
-        result = hexstrike_client.safe_post("api/tools/amass", data, timeout=timeout)
+        http_timeout = max(timeout + 30, 60)
+        logger.info(f"🔍 Starting Amass {mode}: {resolved_domain} (timeout={timeout}s, http_timeout={http_timeout}s)")
+        result = hexstrike_client.safe_post("api/tools/amass", data, timeout=http_timeout)
         if result.get("success"):
             logger.info(f"✅ Amass completed for {resolved_domain}")
         else:

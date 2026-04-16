@@ -8631,7 +8631,7 @@ cve_intelligence = CVEIntelligenceManager()
 exploit_generator = AIExploitGenerator()
 vulnerability_correlator = VulnerabilityCorrelator()
 
-def execute_command(command: str, use_cache: bool = True, no_cache: bool = False) -> Dict[str, Any]:
+def execute_command(command: str, use_cache: bool = True, no_cache: bool = False, timeout: Optional[int] = None) -> Dict[str, Any]:
     """
     Execute a shell command with enhanced features
 
@@ -8639,6 +8639,7 @@ def execute_command(command: str, use_cache: bool = True, no_cache: bool = False
         command: The command to execute
         use_cache: Whether to use caching for this command
         no_cache: Force bypass cache (for debugging, also auto-detected from ?no_cache=1)
+        timeout: Maximum subprocess execution time in seconds (default: COMMAND_TIMEOUT=300)
 
     Returns:
         A dictionary containing the stdout, stderr, return code, and metadata
@@ -8651,6 +8652,21 @@ def execute_command(command: str, use_cache: bool = True, no_cache: bool = False
         except RuntimeError:
             pass  # Not in request context
 
+    # Auto-detect timeout from Flask request JSON body
+    if timeout is None:
+        try:
+            req_json = request.get_json(silent=True)
+            if req_json and "timeout" in req_json:
+                timeout = int(req_json["timeout"])
+        except (RuntimeError, ValueError, TypeError):
+            pass  # Not in request context or invalid timeout value
+
+    effective_timeout = timeout if timeout is not None else COMMAND_TIMEOUT
+
+    # Clamp to minimum 1 to prevent subprocess.wait(timeout=0) from raising immediately
+    if effective_timeout < 1:
+        effective_timeout = 1
+
     # Check cache first (skip if no_cache requested)
     if use_cache and not no_cache:
         cached_result = cache.get(command, {})
@@ -8658,7 +8674,7 @@ def execute_command(command: str, use_cache: bool = True, no_cache: bool = False
             return cached_result
 
     # Execute command
-    executor = EnhancedCommandExecutor(command)
+    executor = EnhancedCommandExecutor(command, timeout=effective_timeout)
     result = executor.execute()
 
     # Cache results with TTL based on success/failure
@@ -8671,7 +8687,7 @@ def execute_command(command: str, use_cache: bool = True, no_cache: bool = False
     return result
 
 def execute_command_with_recovery(tool_name: str, command: str, parameters: Dict[str, Any] = None,
-                                 use_cache: bool = True, max_attempts: int = 3) -> Dict[str, Any]:
+                                 use_cache: bool = True, max_attempts: int = 3, timeout: Optional[int] = None) -> Dict[str, Any]:
     """
     Execute a command with intelligent error handling and recovery
 
@@ -8681,6 +8697,7 @@ def execute_command_with_recovery(tool_name: str, command: str, parameters: Dict
         parameters: Tool parameters for context
         use_cache: Whether to use caching
         max_attempts: Maximum number of recovery attempts
+        timeout: Maximum subprocess execution time in seconds
 
     Returns:
         A dictionary containing execution results with recovery information
@@ -8697,7 +8714,7 @@ def execute_command_with_recovery(tool_name: str, command: str, parameters: Dict
 
         try:
             # Execute the command
-            result = execute_command(command, use_cache)
+            result = execute_command(command, use_cache, timeout=timeout)
 
             # Check if execution was successful
             if result.get("success", False):
@@ -11342,6 +11359,7 @@ def amass():
         domain = params.get("domain", "")
         mode = params.get("mode", "enum")
         additional_args = params.get("additional_args", "")
+        timeout = params.get("timeout", None)
 
         if not domain:
             logger.warning("🌐 Amass called without domain parameter")
@@ -11359,8 +11377,8 @@ def amass():
         if additional_args:
             command += f" {additional_args}"
 
-        logger.info(f"🔍 Starting Amass {mode}: {domain}")
-        result = execute_command(command)
+        logger.info(f"🔍 Starting Amass {mode}: {domain} (timeout={timeout}s)")
+        result = execute_command(command, timeout=timeout)
         logger.info(f"📊 Amass completed for {domain}")
         return jsonify(result)
     except Exception as e:
