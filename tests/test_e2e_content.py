@@ -53,7 +53,8 @@ def test_nmap_output_contains_port_info():
 
     stdout = result.get("stdout", "")
     assert len(stdout) > 0, "nmap stdout is empty"
-    assert "22" in stdout, f"Expected port '22' in nmap output, got: {stdout[:300]}"
+    assert any(p in stdout for p in ["22/tcp", "open", "closed", "filtered"]), \
+        f"nmap output lacks port state info: {stdout[:300]}"
 
 
 def test_amass_wrapper_returns_valid_structure():
@@ -72,6 +73,10 @@ def test_amass_wrapper_returns_valid_structure():
     assert "success" in result, f"Missing 'success' field: {list(result.keys())}"
     assert "stdout" in result, f"Missing 'stdout' field: {list(result.keys())}"
     assert "stderr" in result, f"Missing 'stderr' field: {list(result.keys())}"
+
+    # The wrapper MUST populate execution_time to prove it ran
+    assert "execution_time" in result, \
+        f"Response lacks execution_time — wrapper may not have executed: {list(result.keys())}"
 
     # If timed out, that's acceptable — the wrapper handled it correctly
     if result.get("timed_out"):

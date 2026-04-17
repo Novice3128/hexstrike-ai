@@ -27,11 +27,14 @@ def skip_if_no_container():
         pytest.skip("docker not available or container not running")
 
 
-def test_execute_command_has_timeout_param():
+def test_execute_command_respects_timeout():
+    """Verify execute_command actually kills subprocess on timeout inside container."""
     stdout, stderr, rc = _docker_exec(
-        "python3 -c \"from hexstrike_server import execute_command; import inspect; "
-        "sig=inspect.signature(execute_command); "
-        "assert 'timeout' in sig.parameters, f'Missing: {sig}'; print('OK')\""
+        "python3 -c \"from hexstrike_server import execute_command; "
+        "r = execute_command('sleep 30', no_cache=True, timeout=2); "
+        "assert r['timed_out'] is True, f'Expected timed_out, got: {r}'; "
+        "assert 2.0 <= r['execution_time'] <= 4.0, f'Time out of bounds: {r[\\\"execution_time\\\"]}'; "
+        "print('OK')\""
     )
     assert rc == 0 and "OK" in stdout, f"Failed: rc={rc}, stdout={stdout}, stderr={stderr}"
 

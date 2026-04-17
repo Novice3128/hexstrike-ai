@@ -70,24 +70,26 @@ from mitmproxy.options import Options as MitmOptions
 # ============================================================================
 
 # Configure logging with fallback for permission issues
-try:
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler('hexstrike.log')
-        ]
-    )
-except PermissionError:
-    # Fallback to console-only logging if file creation fails
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
+# Guard: skip if root logger already has handlers (e.g., pytest configures its own)
+if not logging.getLogger().handlers:
+    try:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler(sys.stdout),
+                logging.FileHandler('hexstrike.log', delay=True)
+            ]
+        )
+    except PermissionError:
+        # Fallback to console-only logging if file creation fails
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler(sys.stdout)
+            ]
+        )
 logger = logging.getLogger(__name__)
 
 # Flask app configuration
@@ -6908,6 +6910,10 @@ class EnhancedCommandExecutor:
                 # Process completed, join the threads
                 self.stdout_thread.join(timeout=1)
                 self.stderr_thread.join(timeout=1)
+
+                # Close pipe file handles to prevent ResourceWarning
+                self.process.stdout.close()
+                self.process.stderr.close()
 
                 execution_time = self.end_time - self.start_time
 
