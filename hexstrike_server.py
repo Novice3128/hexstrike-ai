@@ -99,6 +99,17 @@ app.config['JSON_SORT_KEYS'] = False
 # API Configuration
 API_PORT = int(os.environ.get('HEXSTRIKE_PORT', 8888))
 API_HOST = os.environ.get('HEXSTRIKE_HOST', '127.0.0.1')
+HEXSTRIKE_API_KEY = os.environ.get('HEXSTRIKE_API_KEY', '')
+
+
+@app.before_request
+def require_api_key():
+    if not HEXSTRIKE_API_KEY:
+        return None
+    if request.path == '/health':
+        return None
+    if request.headers.get('X-API-Key', '') != HEXSTRIKE_API_KEY:
+        return jsonify({'error': 'Invalid or missing API key'}), 401
 
 # ============================================================================
 # MODERN VISUAL ENGINE (v2.0 ENHANCEMENT)
