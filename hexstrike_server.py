@@ -10519,9 +10519,9 @@ def nuclei():
                 "template": template,
                 "additional_args": additional_args
             }
-            result = execute_command_with_recovery("nuclei", command, tool_params)
+            result = execute_command_with_recovery("nuclei", command, tool_params, max_attempts=1, timeout=90)
         else:
-            result = execute_command(command)
+            result = execute_command(command, timeout=90)
 
         logger.info(f"📊 Nuclei scan completed for {target}")
         return jsonify(result)

@@ -74,7 +74,7 @@ RUN git clone --depth 1 --branch 5.9.0 https://github.com/radareorg/radare2.git 
 # ========================================
 RUN curl -sL https://go.dev/dl/go1.22.0.linux-amd64.tar.gz | tar -C /usr/local -xz \
     && export PATH=$PATH:/usr/local/go/bin:/root/go/bin \
-    && go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest \
+    && go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.9.0 \
     && go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest \
     && go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
     && go install -v github.com/OJ/gobuster/v3@latest \
@@ -85,6 +85,13 @@ RUN curl -sL https://go.dev/dl/go1.22.0.linux-amd64.tar.gz | tar -C /usr/local -
     && go install -v github.com/hakluke/hakrawler@latest \
     && mv /root/go/bin/* /usr/local/bin/ \
     && rm -rf /root/go /usr/local/go
+
+# Bake nuclei templates at build time. Without this, the first scan after deploy
+# downloads templates at runtime (~15s+), pushing scans past the route/adapter
+# timeout ceiling (issue #38). Loud guard — no || true fallback.
+RUN nuclei -update-templates \
+    && test -d /root/nuclei-templates \
+    && test -n "$(ls -A /root/nuclei-templates)"
 
 # ========================================
 # Layer 5: Rust 工具 (feroxbuster)
