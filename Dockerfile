@@ -51,6 +51,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     # enum4linux-ng full deps (nmblookup, net)
     samba-common-bin \
+    # P2 - DNS enumeration (dnsenum pulls Perl deps automatically)
+    dnsenum \
+    # P2 - DNS recon (fierce — Domain DNS scanner, Debian bookworm apt)
+    fierce \
+    # P2 - Metadata extraction (libimage-exiftool-perl provides exiftool binary)
+    libimage-exiftool-perl \
     && rm -rf /var/lib/apt/lists/*
 
 # ========================================
@@ -134,6 +140,25 @@ RUN pip install --no-cache-dir \
 # ========================================
 RUN pip install --no-cache-dir arjun \
     && pip install --no-cache-dir uro
+
+# ========================================
+# Layer 9: Responder (SpiderLabs/Responder) — credential harvesting
+# Not in Debian bookworm apt; install from GitHub + wrapper script
+# hexstrike invokes `responder -I <iface>`, not `Responder.py` directly.
+# ========================================
+RUN git clone --depth 1 https://github.com/lgandx/Responder.git /opt/responder \
+    && printf '#!/bin/sh\nexec python3 /opt/responder/Responder.py "$@"\n' \
+       > /usr/local/bin/responder \
+    && chmod +x /usr/local/bin/responder
+
+# ========================================
+# Layer 10: DotDotPwn (wireghoul/dotdotpwn) — directory traversal fuzzer
+# Not in Debian bookworm apt or PyPI; install from GitHub (Perl-based)
+# hexstrike invokes `dotdotpwn -m <module> -h <target> -b`
+# ========================================
+RUN git clone --depth 1 https://github.com/wireghoul/dotdotpwn.git /opt/dotdotpwn \
+    && ln -s /opt/dotdotpwn/dotdotpwn.pl /usr/local/bin/dotdotpwn \
+    && chmod +x /opt/dotdotpwn/dotdotpwn.pl
 
 # 複製應用代碼
 # ⚠️ 文件角色說明 (避免混淆):
